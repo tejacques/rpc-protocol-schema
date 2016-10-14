@@ -8,11 +8,13 @@ import {
     is_primitive_type } from './types'
 
 export function parse_namespace(lexer: IterableIterator<lexer_token>) {
-    const next = lexer.next()
     const names: string[] = []
-    let next_token = next.value
+
+    let next_token: lexer_token
     let prev_token: lexer_token
     do {
+        const next = lexer.next()
+        next_token = next.value
         prev_token = next_token
         names.push(parse_namespace_token(next_token))
         next_token = lexer.next().value
@@ -69,6 +71,7 @@ export interface Namespace {
     kind: 'NAMESPACE'
     namespace: string[]
 }
+export type Command = Struct | Union | Namespace
 
 export function Kind(kind: 'STRUCT' | 'UNION', name: string, generics: string[], fields: Field[]): Struct | Union {
     return {
@@ -90,23 +93,23 @@ export function PrimitiveType(name: primitive_type): PrimitiveType {
 
 export interface ListType {
     name: 'List'
-    type: Type
+    generic: Type
 }
-export function ListType(type: Type): ListType {
+export function ListType(generic: Type): ListType {
     return {
         name: 'List',
-        type
+        generic
     }
 }
 
 export interface GenericType {
     name: string
-    types: Type[]
+    generics: Type[]
 }
-export function GenericType(name: string, types: Type[]): GenericType {
+export function GenericType(name: string, generics: Type[]): GenericType {
     return {
         name,
-        types
+        generics
     }
 }
 
@@ -120,6 +123,17 @@ export function Field(name: string, type: Type): Field {
     return {
         name,
         type
+    }
+}
+
+export function parse_token(token_string: string, lexer: IterableIterator<lexer_token>) {
+    const next = lexer.next()
+    if (next.done) {
+        throw Error(`Error: unexpected end of stream`)
+    }
+
+    if (next.value.token !== token_string) {
+        throw Error(`Error: Expected '${token_string}' but got '${next.value.token}'`)
     }
 }
 
@@ -146,10 +160,10 @@ export function parse_name(lexer: IterableIterator<lexer_token>) {
 }
 
 export function parse_name_token(token: lexer_token) {
-    if (/[a-z][a-z0-9_]*/.test(token.token)) {
+    if (/[a-zA-Z0-9_]+/.test(token.token)) {
         return token.token
     } else {
-        throw Error(`Name must be lowercase snake_case and alphanumeric, beginning with an alpha character`)
+        throw Error(`Name: '${token.token}' must be lowercase snake_case and alphanumeric, beginning with an alpha character`)
     }
 }
 
@@ -242,20 +256,32 @@ function is_dot_character(dot_token: lexer_token) {
 
 export function parse_field(name_token: lexer_token, lexer: IterableIterator<lexer_token>) {
     const name = parse_name_token(name_token)
+    parse_token(':', lexer)
     const type = parse_type(lexer)
     return Field(name, type)
 }
 
 export function parse_fields(lexer: IterableIterator<lexer_token>) {
-    let next_token = lexer.next().value;
+    let next_token = lexer.next().value
     if (next_token.token !== '{') {
         throw Error(`Error: expected fields beginning with '{' following generic parameters, but got '${next_token.token}'`)
+    }
+    next_token = lexer.next().value
+    if (next_token.type === 'NEWLINE') {
+        next_token = lexer.next().value
     }
     const fields: Field[] = []
     do {
         fields.push(parse_field(next_token, lexer))
         next_token = lexer.next().value
-    } while(!is_close_brace(next_token))
+        if (next_token.type === 'COMMA' || next_token.type === 'NEWLINE') {
+            next_token = lexer.next().value
+        }
+    } while(next_token.type === 'IDENTIFIER')
+
+    if (next_token.type !== 'R_BRACE') {
+        throw Error(`Error: Expected '}' but got ${next_token.type}: '${next_token.token}'`)
+    }
 
     return fields
 }
@@ -307,7 +333,27 @@ export function parse_command(lexer: IterableIterator<lexer_token>) {
 
 }
 
+export function parse_commands(lexer: IterableIterator<lexer_token>) {
+    let next: IteratorResult<lexer_token>
+    const commands: Command[] = []
+    while((next = lexer.next()) && !next.done) {
+        const nextToken = next.value
+        switch (nextToken.type) {
+            case 'NEWLINE':
+            case 'END':
+                continue
+            case 'IDENTIFIER':
+                // Reset Lexer
+                lexer.next(nextToken)
+                commands.push(parse_command(lexer))
+                break
+        }
+    }
+
+    return commands
+}
+
 export function parse(command: string) {
     const lexer = tokenize(command);
-    return parse_command(lexer)
+    return parse_commands(lexer)
 }

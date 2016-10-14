@@ -28,6 +28,8 @@ type token_type = 'NUMBER'
     | 'IDENTIFIER'
     | 'QUOTE'
     | 'COMMENT'
+    | 'NEWLINE'
+    | 'END'
     | operator_token
 
 // Operator table, mapping operator -> token name
@@ -36,6 +38,7 @@ const optable: { [name: string]: void | operator_token } = {
     '-':  'MINUS' as 'MINUS',
     '*':  'MULTIPLY' as 'MULTIPLY',
     '.':  'DOT' as 'DOT',
+    '/': 'DIVIDE' as 'DIVIDE',
     '\\': 'BACKSLASH' as 'BACKSLASH',
     ':':  'COLON' as 'COLON',
     '%':  'PERCENT' as 'PERCENT',
@@ -57,10 +60,6 @@ const optable: { [name: string]: void | operator_token } = {
     '=':  'EQUALS' as 'EQUALS',
 }
 
-function is_operator(character: string): void | operator_token {
-    return optable[character]
-}
-
 function is_whitespace(character: string) {
     return character === ' ' || character === '\t'
 }
@@ -69,43 +68,101 @@ function is_newline(character: string) {
     return character === '\r' || character === '\n'
 }
 
+const alpha_characters: { [character: string]: boolean } = {}
+const numeric_characters: { [character: string]: boolean } = {}
+const alphanumeric_characters: {[alphanumeric: string]: boolean} = {}
+for (let i = 'a'.charCodeAt(0); i <= 'z'.charCodeAt(0); i++) {
+    alpha_characters[String.fromCharCode(i)] = true
+    alphanumeric_characters[String.fromCharCode(i)] = true
+}
+for (let i = 'A'.charCodeAt(0); i <= 'Z'.charCodeAt(0); i++) {
+    alpha_characters[String.fromCharCode(i)] = true
+    alphanumeric_characters[String.fromCharCode(i)] = true
+}
+for (let i = '0'.charCodeAt(0); i <= '9'.charCodeAt(0); i++) {
+    numeric_characters[String.fromCharCode(i)] = true
+    alphanumeric_characters[String.fromCharCode(i)] = true
+}
+alpha_characters['_'] = true
+alphanumeric_characters['_'] = true
+
+function is_alpha(character: string) {
+    return alpha_characters[character] || false
+}
+
+function is_numeric(character: string) {
+    return numeric_characters[character] || false
+}
+
+function is_alphanumeric(character: string) {
+    return alphanumeric_characters[character] || false
+}
+
+
 export interface lexer_token {
     type: token_type
     token: string
     start_index: number
     end_index: number
 }
-export function *tokenize(command: string) {
+export function *tokenize(input: string) {
     let start_index = 0
     let end_index = 0
 
-    const len = command.length
+    const len = input.length
     let current_char = ''
-    let prev_char = ''
 
     const process_comment = () => {
-        while(!is_newline(command[end_index]) && end_index < len) {
+        while(!is_newline(input[end_index]) && end_index < len) {
             end_index++
         }
     }
 
-    const process_nontokens = () => {
-        while(is_whitespace(command[end_index])) {
+    const process_non_tokens = () => {
+        while(is_whitespace(input[end_index])) {
             end_index++
         }
         start_index = end_index
     }
 
     const process_quote = (quote_literal: string) => {
-        end_index = command.indexOf(quote_literal, start_index+quote_literal.length)
+        end_index = input.indexOf(quote_literal, start_index+quote_literal.length)
 
         if (end_index === -1) {
             throw Error(`Error: Unterminated quote at ${start_index}`);
         }
+
+        return yieldVal(next_token('QUOTE'))
+    }
+
+    const process_identifier = () => {
+        end_index++
+        while (end_index < len && is_alphanumeric(input[end_index])) {
+            end_index++
+        }
+
+        return yieldVal(next_token('IDENTIFIER'))
+    }
+
+    const process_number = () => {
+        while (is_numeric(input[end_index])) {
+            end_index++
+        }
+
+        return yieldVal(next_token('NUMBER'))
+    }
+
+    const process_newline = () => {
+        while(is_newline(input[end_index])) {
+            end_index++
+            process_non_tokens()
+        }
+
+        return yieldVal(next_token('NEWLINE'))
     }
 
     const next_token = (type: token_type) => {
-        const token = command.substring(start_index, end_index)
+        const token = input.substring(start_index, end_index)
         
         const next: lexer_token = {
             type,
@@ -123,53 +180,52 @@ export function *tokenize(command: string) {
         const reset: void | lexer_token = yield token
         if (reset) {
             start_index = reset.start_index
-            end_index = reset.end_index
-            current_char = command[end_index]
+            end_index = reset.start_index
+            current_char = input[end_index]
             yield token
         }
     }
 
-    do for(current_char=command[end_index]; end_index < len;
-        (prev_char = current_char, current_char = command[++end_index])) {
+    while(true) {
+        process_non_tokens()
 
-        // ignore consecutive whitespace
-        if (is_whitespace(current_char)) {
-            if (is_whitespace(prev_char) || prev_char === '' || prev_char === '{' || prev_char === '\n') {
-                //start_index++
-                next_token()
-                continue
-            } else {
-                const next = next_token()
-                yield *yieldVal(next)
-                // This was a whitespace character so skip it
-                start_index++
-                continue
-            }
-        }
+        const current_char = input[end_index]
 
-        // ignore consecutive newlines
-        if (current_char === '\n') {
-            if (prev_char === '\n' || prev_char === '' || prev_char === '{' || is_whitespace(prev_char)) {
-                next_token()
-                continue
-            } else {
-                // const next = next_token()
-                // yield *yieldVal(next)
-                // // This was a whitespace character so skip it
-                // end_index++
-                // yield *yieldVal(next_token())
-                // continue
-            }
-        }
-
-        let op = is_operator(current_char)
-        if (op) {
-            const next = next_token()
-            if (!is_whitespace(prev_char) && prev_char !== '') {
-                yield *yieldVal(next)
-            }
+        const operator = optable[current_char]
+        if (operator) {
             end_index++
-            yield *yieldVal(next_token())
+            yield *yieldVal(next_token(operator))
+            continue
         }
-    } while(yield *yieldVal(next_token()), end_index < len)
+
+        if (is_newline(current_char)) {
+            yield *process_newline()
+            continue
+        }
+
+        if (is_alpha(current_char)) {
+            yield *process_identifier()
+            continue
+        }
+
+        if (is_numeric(current_char)) {
+            yield *process_number()
+            continue
+        }
+
+        if (current_char === '"' || current_char === "'") {
+            yield *process_quote(current_char)
+            continue
+        }
+
+        if (start_index >= len) {
+            yield *yieldVal(next_token('END'))
+            if (start_index >= len) {
+                break
+            }
+            continue
+        }
+
+        throw new Error(`Error processing next token at position: ${start_index}, char: '${current_char}'`)
+    }
 }
