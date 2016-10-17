@@ -1,4 +1,4 @@
-type operator_token =
+export type operator_token =
       'PLUS'
     | 'MINUS'
     | 'MULTIPLY'
@@ -24,7 +24,7 @@ type operator_token =
     | 'R_BRACKET'
     | 'EQUALS'
 
-type token_type = 'NUMBER'
+export type token_type = 'NUMBER'
     | 'IDENTIFIER'
     | 'QUOTE'
     | 'COMMENT'
@@ -112,11 +112,11 @@ export function *tokenize(input: string) {
     const len = input.length
     let current_char = ''
 
-    const process_comment = () => {
-        while(!is_newline(input[end_index]) && end_index < len) {
-            end_index++
-        }
-    }
+    // const process_comment = () => {
+    //     while(!is_newline(input[end_index]) && end_index < len) {
+    //         end_index++
+    //     }
+    // }
 
     const process_non_tokens = () => {
         while(is_whitespace(input[end_index])) {
@@ -153,10 +153,12 @@ export function *tokenize(input: string) {
     }
 
     const process_newline = () => {
+        const saved_start = start_index
         while(is_newline(input[end_index])) {
             end_index++
             process_non_tokens()
         }
+        start_index = saved_start
 
         return yieldVal(next_token('NEWLINE'))
     }

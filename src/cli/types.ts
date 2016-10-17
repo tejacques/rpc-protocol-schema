@@ -36,3 +36,38 @@ export function is_primitive_type(type: string): type is primitive_type {
         || type === 'String'
         || type === 'Data'
 }
+
+export interface PrimitiveType {
+    name: primitive_type 
+}
+export function PrimitiveType(name: primitive_type): PrimitiveType {
+    return {
+        name
+    }
+}
+
+export interface ListType {
+    name: 'List'
+    generic: Type
+}
+export function ListType(generic: Type): ListType {
+    return {
+        name: 'List',
+        generic
+    }
+}
+
+export interface GenericType {
+    namespace: string[]
+    name: string
+    generics: Type[]
+}
+export function GenericType(name: string, namespace: string[], generics: Type[]): GenericType {
+    return {
+        namespace,
+        name,
+        generics
+    }
+}
+
+export type Type = PrimitiveType | GenericType | ListType
