@@ -10,21 +10,35 @@ export interface State {
 
 }
 
+export interface FieldState {
+    [name: string]: {
+        type: StructState | UnionState
+        default: void | ValueState
+    }
+}
+
 export interface StructState {
+    kind: 'StructState'
     id: VersionID
+    name: string
+    fields: FieldState[]
 }
 
 export interface UnionState {
+    kind: 'UnionState'
     id: VersionID
+    name: string
+    fields: FieldState[]
 }
 
 export interface ValueState {
+    kind: 'ValueState'
     id: VersionID
     type: TypeState
     value: Value
 }
 
-export interface VersionState {
+export interface VersionNumber {
     minimumCompatible: number
     current: number
 }
@@ -34,23 +48,36 @@ export interface VersionID {
     high: number
 }
 
-export interface NamespaceVersion {
-    [namespace: string]: VersionState
+export type IdentifierTo<T> = {
+    [low: number]: {
+        [high: number]: T
+    }
+}
+
+export type StateVersion = IdentifierTo<void | VersionNumber>
+
+export interface NamespaceState {
+    kind: 'NamespaceState'
+    id: VersionID
+    namespace: string[]
+    name: string
+    version: VersionNumber
+    dependencies: StateVersion
+    structs: StateVersion
+    unions: StateVersion
+    values: StateVersion
 }
 
 export interface NamespaceState {
+    kind: 'NamespaceState'
     id: VersionID
-    version: VersionState
-    dependencies: NamespaceVersion
-    structs: {
-        [name: string]: StructState
-    }
-    unions: {
-        [name: string]: UnionState
-    }
-    values: {
-        [name: string]: ValueState
-    }
+    namespace: string[]
+    name: string
+    version: VersionNumber
+    dependencies: StateVersion
+    structs: StateVersion
+    unions: StateVersion
+    values: StateVersion
 }
 
 export interface NamespaceHistory {
@@ -58,7 +85,7 @@ export interface NamespaceHistory {
     history: {
         [version: number]: NamespaceState
     }
-    version: NamespaceVersion
+    version: VersionNumber
 }
 
 // ==== Types =====
@@ -122,11 +149,7 @@ export function type_to_type_state(type: Type, typeMap: TypeMap): TypeState {
     }
 }
 
-export type VersionMap = {
-    [low: number]: {
-        [high: number]: void | StructState | UnionState | NamespaceState
-    }
-}
+export type VersionMap = IdentifierTo<void | StructState | UnionState | NamespaceState>
 
 function version_to_state(
     versionID: VersionID,
