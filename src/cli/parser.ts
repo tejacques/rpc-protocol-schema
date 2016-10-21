@@ -123,7 +123,7 @@ export function parse_constant(lexer: IterableIterator<lexer_token>) {
     return Constant(name, namespace, type, value)
 }
 
-export function parse_create(lexer: IterableIterator<lexer_token>): Command {
+export function parse_create(lexer: IterableIterator<lexer_token>): CreateCommand {
     const next = lexer.next()
     if (next.done) {
         throw Error('Error unexpected end of command while trying to parse CREATE statement')
@@ -186,7 +186,13 @@ export interface Constant {
     type: Type
     value: Value
 }
-export type Command = Struct | Union | Interface | Namespace | Constant
+export type CreateCommand = Struct | Union | Interface | Namespace | Constant
+
+export interface Delete {
+    kind: 'DELETE'
+    namespace: string[]
+    name: string
+}
 
 export function Struct(name: string, namespace: string[], generics: string[], fields: Field[]): Struct {
     return {
@@ -430,7 +436,7 @@ export function parse_command(lexer: IterableIterator<lexer_token>) {
 
 export function parse_commands(lexer: IterableIterator<lexer_token>) {
     let next: IteratorResult<lexer_token>
-    const commands: Command[] = []
+    const commands: CreateCommand[] = []
     while((next = lexer.next()) && !next.done) {
         const nextToken = next.value
         switch (nextToken.type) {

@@ -34,6 +34,7 @@ export interface UnionState {
 export interface ValueState {
     kind: 'ValueState'
     id: VersionID
+    name: string
     type: TypeState
     value: Value
 }
@@ -49,7 +50,7 @@ export interface VersionID {
 }
 
 export type IdentifierTo<T> = {
-    [low: number]: {
+    [low: number]: void | {
         [high: number]: T
     }
 }
@@ -62,19 +63,6 @@ export interface NamespaceState {
     namespace: string[]
     name: string
     version: VersionNumber
-    dependencies: StateVersion
-    structs: StateVersion
-    unions: StateVersion
-    values: StateVersion
-}
-
-export interface NamespaceState {
-    kind: 'NamespaceState'
-    id: VersionID
-    namespace: string[]
-    name: string
-    version: VersionNumber
-    dependencies: StateVersion
     structs: StateVersion
     unions: StateVersion
     values: StateVersion
@@ -151,7 +139,7 @@ export function type_to_type_state(type: Type, typeMap: TypeMap): TypeState {
 
 export type VersionMap = IdentifierTo<void | StructState | UnionState | NamespaceState>
 
-function version_to_state(
+export function version_to_state(
     versionID: VersionID,
     map: VersionMap) {
     const highMap = map[versionID.low]
