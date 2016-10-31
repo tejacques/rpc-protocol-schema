@@ -27,7 +27,7 @@ export function is_float_type(type: string): type is float_type {
 
 export type list_type = 'List'
 
-export type primitive_type = 'Void' | 'Boolean' | integer_type | float_type | 'String' | 'Data' | list_type
+export type primitive_type = 'Void' | 'Boolean' | integer_type | float_type | 'String' | 'Data'
 export function is_primitive_type(type: string): type is primitive_type {
     return is_integer_type(type)
         || is_float_type(type)
@@ -48,16 +48,16 @@ export function PrimitiveType(name: primitive_type): PrimitiveType {
     }
 }
 
-export interface ListType {
-    kind: 'List'
-    generic: Type
-}
-export function ListType(generic: Type): ListType {
-    return {
-        kind: 'List',
-        generic
-    }
-}
+// export interface ListType {
+//     kind: 'List'
+//     generic: Type
+// }
+// export function ListType(generic: Type): ListType {
+//     return {
+//         kind: 'List',
+//         generic
+//     }
+// }
 
 export interface GenericType {
     kind: 'GenericType'
@@ -74,4 +74,4 @@ export function GenericType(name: string, namespace: string[], generics: Type[])
     }
 }
 
-export type Type = PrimitiveType | GenericType | ListType
+export type Type = PrimitiveType | GenericType// | ListType

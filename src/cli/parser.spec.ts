@@ -32,6 +32,10 @@ CREATE INTERFACE Calculator {
     multiply<T>(calculation: Calculation<T>, value: T) => (calculation: Calculation<T>)
     divide<T>(calculation: Calculation<T>, value: T) => (calculation: Calculation<T>)
 }
+
+CREATE STRUCT Container<T> {
+    content: Option<Option<T>>
+}
 `
 
 const lexer = tokenize(command)
@@ -69,6 +73,15 @@ CREATE CONSTANT Namespace0.someValue: Namespace0.Namespace1.Option<Namespace0.Na
         some: {
             bar: 3
             baz: 3.0
+        }
+    }
+}
+
+CREATE CONSTANT Namespace0.someOtherValue: Container<foo> = {
+    some: {
+        some: {
+            bar: 4
+            baz: 4.0
         }
     }
 }

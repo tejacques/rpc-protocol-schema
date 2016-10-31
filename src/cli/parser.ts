@@ -15,7 +15,7 @@ import {
     Type,
     is_primitive_type,
     PrimitiveType,
-    ListType,
+    //ListType,
     GenericType,
 } from './types'
 
@@ -186,13 +186,25 @@ export interface Constant {
     type: Type
     value: Value
 }
-export type CreateCommand = Struct | Union | Interface | Namespace | Constant
 
-export interface Delete {
+export type CreateCommandType = Struct | Union | Interface | Namespace | Constant
+
+export type CreateCommand = {
+    kind: 'CREATE'
+    type: CreateCommandType
+}
+
+export interface DeleteCommand {
     kind: 'DELETE'
     namespace: string[]
     name: string
 }
+
+export interface UpdateCommand {
+    kind: 'UPDATE'
+}
+
+export type Command = CreateCommand | DeleteCommand | UpdateCommand
 
 export function Struct(name: string, namespace: string[], generics: string[], fields: Field[]): Struct {
     return {
@@ -286,9 +298,9 @@ export function parse_type(lexer: IterableIterator<lexer_token>): Type {
     if(is_primitive_type(name)) {
         return PrimitiveType(name)
     } else {
-        if (name === 'List') {
-            return ListType(parse_generic_type(lexer))
-        }
+        // if (name === 'List') {
+        //     return ListType(parse_generic_type(lexer))
+        // }
 
         const [matches, parsed_token] = try_parse_token('<', lexer)
         let types: Type[] = []

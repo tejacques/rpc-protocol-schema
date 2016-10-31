@@ -173,3 +173,13 @@ export function parse_value(lexer: IterableIterator<lexer_token>): Value {
 
     throw Error(`Error: Invalid value`)
 }
+
+export function parse_list(lexer: IterableIterator<lexer_token>): ListValue {
+    return ListValue(parse_inner_series(
+        'list value',
+        'L_BRACKET',
+        'R_BRACKET',
+        ['COMMA', 'NEWLINE'],
+        parse_value,
+        lexer))
+}
