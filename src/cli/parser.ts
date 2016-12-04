@@ -124,6 +124,13 @@ export function parse_constant(lexer: IterableIterator<lexer_token>) {
 }
 
 export function parse_create(lexer: IterableIterator<lexer_token>): CreateCommand {
+    return {
+        kind: 'CREATE',
+        type: parse_create_type(lexer)
+    }
+}
+
+export function parse_create_type(lexer: IterableIterator<lexer_token>): CreateCommandType {
     const next = lexer.next()
     if (next.done) {
         throw Error('Error unexpected end of command while trying to parse CREATE statement')
@@ -271,11 +278,13 @@ export function Constant(name: string, namespace: string[], type: Type, value: V
 export interface Field {
     name: string
     type: Type
+    value?: Value
 }
-export function Field(name: string, type: Type): Field {
+export function Field(name: string, type: Type, value?: Value): Field {
     return {
         name,
-        type
+        type,
+        value,
     }
 }
 
@@ -439,7 +448,7 @@ export function parse_command(lexer: IterableIterator<lexer_token>) {
     case 'SHOW':
         return parse_show(lexer)
     case 'ALTER':
-        return parse_alter(lexer)*/
+        return parse_update(lexer)*/
     default:
         throw Error(`Expected one of {CREATE, DELETE, SHOW, ALTER}, but got: '${nextToken.token}'`)
     }
