@@ -216,21 +216,50 @@ Both constants and default values can be specified:
 CREATE CONSTANT <NAME>: <TYPE> = <VALUE>
 ```
 
-Where `<VALUE>` is either a literal primitive value, or a reference to another const.
+Where `<VALUE>` is either a literal primitive value, an object, a list, or a reference to another const.
 
 ##### Example
 
+Primitive:
 ```
-CREATE CONSTANT fred: Person = Person(name = "Fred", date_of_birth = Date(1990-01-01))
+CREATE CONSTANT pi: Float64 = 3.14159
+```
+
+Object:
+```
+CREATE CONSTANT fred: Person = {
+    name = "Fred",
+    date_of_birth = Date(1990-01-01),
+}
 ```
 
 ```
 DELETE CONSTANT fred
 ```
 
+List:
+```
+CREATE CONSTANT numbers: List<Int32> = [
+    1
+    2
+    3
+]
+```
+
+Reference:
+```
+CREATE CONSTANT fred2: Person = fred
+```
+
+Union:
+```
+CREATE CONSTANT defaultPerson: Option<Person> = Option.None
+CREATE CONSTANT realPerson: Option<Person> = Option.Some(fred)
+```
+
 #### Default Values
 
-Default values can be specified on any type declaration within a `struct` or `union`
+Default values can be specified on any type declaration within a `struct` or `union` that can be fully expressed, meaning it isn't dependent on generic parameters. 
 
 The general syntax is:
 ```
@@ -239,19 +268,20 @@ The general syntax is:
 
 ```
 CREATE UNION ContainerValues<T> {
-    empty: Void
-    elements: List<T>
+    empty: Void = Void
+    single: T
+    multiple: List<T>
 }
 CREATE STRUCT Container<T> {
     count: Int32 = 0
     max_count: Int32 = 1000
     name: String = "Container"
-    values: ContainerValues<T> = void
+    values: ContainerValues<T> = ContainerValues.multiple([])
 }
 ```
 
 
-### Interface
+### Interfaces
 
 An interface describes functions which take some number of arguments, and return a single result or error
 

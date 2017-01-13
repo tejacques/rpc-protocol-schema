@@ -6,12 +6,22 @@ import {
     Value
 } from '../value'
 
-export interface State {
+/**
+ * ProtocolState represents the overall state of the protocol.
+ * It holds a TypeMap which maps a named type to its unique
+ * VersionID, and VersionMap which maps a VersionID to its
+ * state.
+ */
+export interface ProtocolState {
     versionMap: VersionMap
     namespaces: NamespaceToState
     typeMap: TypeMap
 }
 
+/**
+ * FieldState holds a mapping of the field name to its
+ * TypeStateReference and default value
+ */
 export interface FieldState {
     [name: string]: void | {
         type: TypeStateReference
@@ -19,6 +29,11 @@ export interface FieldState {
     }
 }
 
+/**
+ * FilledFieldState represents a FieldState whose
+ * TypeStateReferences have had their references
+ * filled into a fully specified TypeState
+ */
 export interface FilledFieldState {
     [name: string]: void | {
         type: TypeState
@@ -26,18 +41,32 @@ export interface FilledFieldState {
     }
 }
 
+/**
+ * PrimitiveTypeState represents an intrinsic primitive
+ * type identified by its name and its `id` field
+ */
 export interface PrimitiveState {
     kind: 'PrimitiveState'
     id: VersionID
     name: string
 }
 
+/**
+ * ListState represents the state for a List
+ */
 export interface ListState {
     kind: 'ListState'
     id: VersionID
     name: string
 }
 
+/**
+ * StructState holds the state for a struct.
+ * @id: The unique identifier for this struct
+ * @name: The fully qualified name of the struct
+ * @fields: The FieldState for the fields of the struct
+ * @numberOfGenerics: The number of generic arguments this struct receives
+ */
 export interface StructState {
     kind: 'StructState'
     id: VersionID
@@ -46,6 +75,13 @@ export interface StructState {
     numberOfGenerics: number
 }
 
+/**
+ * UnionState holds the state for a union.
+ * @id: The unique identifier for this union
+ * @name: The fully qualified name of the union
+ * @fields: The FieldState for the fields of the union
+ * @numberOfGenerics: The number of generic arguments this union receives
+ */
 export interface UnionState {
     kind: 'UnionState'
     id: VersionID
@@ -54,6 +90,13 @@ export interface UnionState {
     numberOfGenerics: number
 }
 
+/**
+ * ValueState represents a created constant constant
+ * @id: The unique identifier for this constant
+ * @name: The fully qualified name of the constant
+ * @type: The TypeState of this value
+ * @value: The value of this constant
+ */
 export interface ValueState {
     kind: 'ValueState'
     id: VersionID
@@ -62,11 +105,18 @@ export interface ValueState {
     value: Value
 }
 
+/**
+ * A generic type reference is a reference to one of
+ * the generic type arguments in a Type
+ */
 export interface GenericTypeReference {
     kind: 'GenericTypeReference'
     index: number
 }
 
+/**
+ * A type reference is a reference to a Type by VersionID
+ */
 export interface TypeReference {
     kind: 'TypeReference'
     versionID: VersionID
@@ -159,6 +209,9 @@ export interface GenericTypeStateReference {
 
 export type TypeStateReference = TypeState | GenericTypeStateReference
 
+/**
+ * Maps a fully qualified name to its VersionID, if present
+ */
 export interface TypeMap {
     [name: string]: void | VersionID
 }
@@ -171,14 +224,6 @@ export function type_to_type_state(type: Type, typeMap: TypeMap): TypeState {
             throw Error(`Error: type: ${type.name} does not exist`)
         }
         return PrimitiveTypeState(versionID)
-    // } else if (type.kind === 'List') {
-    //     // List
-    //     const versionID = typeMap[type.kind]
-    //     if (!versionID) {
-    //         throw Error(`Error: type: List does not exist`)
-    //     }
-    //     const genericTypeState = type_to_type_state(type.generic, typeMap)
-    //     return ListTypeState(versionID, genericTypeState)
     } else {
         // Generic
         const namespacedTypeName = type.generics.join('.') + type.name
@@ -193,7 +238,8 @@ export function type_to_type_state(type: Type, typeMap: TypeMap): TypeState {
     }
 }
 
-export type VersionMap = IdentifierTo<void | PrimitiveState | ListState | StructState | UnionState | NamespaceState>
+export type FilledTypeState = PrimitiveState | ListState | StructState | UnionState
+export type VersionMap = IdentifierTo<void | FilledTypeState | NamespaceState>
 
 export function version_to_state(
     versionID: VersionID,

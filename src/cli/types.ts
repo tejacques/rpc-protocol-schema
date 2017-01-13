@@ -48,17 +48,6 @@ export function PrimitiveType(name: primitive_type): PrimitiveType {
     }
 }
 
-// export interface ListType {
-//     kind: 'List'
-//     generic: Type
-// }
-// export function ListType(generic: Type): ListType {
-//     return {
-//         kind: 'List',
-//         generic
-//     }
-// }
-
 export interface GenericType {
     kind: 'GenericType'
     namespace: string[]
@@ -74,4 +63,4 @@ export function GenericType(name: string, namespace: string[], generics: Type[])
     }
 }
 
-export type Type = PrimitiveType | GenericType// | ListType
+export type Type = PrimitiveType | GenericType

@@ -307,10 +307,6 @@ export function parse_type(lexer: IterableIterator<lexer_token>): Type {
     if(is_primitive_type(name)) {
         return PrimitiveType(name)
     } else {
-        // if (name === 'List') {
-        //     return ListType(parse_generic_type(lexer))
-        // }
-
         const [matches, parsed_token] = try_parse_token('<', lexer)
         let types: Type[] = []
         if (matches) {
