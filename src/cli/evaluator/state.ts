@@ -1,3 +1,8 @@
+/**
+ * The intention of the `state` types is to model the interactions between
+ * commands and the internal state of types.
+ */
+
 import {
     Type,
 } from '../types'
@@ -47,7 +52,7 @@ export interface FilledFieldState {
  */
 export interface PrimitiveState {
     kind: 'PrimitiveState'
-    id: VersionID
+    id: TypeID
     name: string
 }
 
@@ -56,7 +61,7 @@ export interface PrimitiveState {
  */
 export interface ListState {
     kind: 'ListState'
-    id: VersionID
+    id: TypeID
     name: string
 }
 
@@ -69,7 +74,7 @@ export interface ListState {
  */
 export interface StructState {
     kind: 'StructState'
-    id: VersionID
+    id: TypeID
     name: string
     fields: FieldState
     numberOfGenerics: number
@@ -84,7 +89,7 @@ export interface StructState {
  */
 export interface UnionState {
     kind: 'UnionState'
-    id: VersionID
+    id: TypeID
     name: string
     fields: FieldState
     numberOfGenerics: number
@@ -99,7 +104,7 @@ export interface UnionState {
  */
 export interface ValueState {
     kind: 'ValueState'
-    id: VersionID
+    id: TypeID
     name: string
     type: TypeState
     value: Value
@@ -119,53 +124,101 @@ export interface GenericTypeReference {
  */
 export interface TypeReference {
     kind: 'TypeReference'
-    versionID: VersionID
+    versionID: TypeID
 }
 
-export interface VersionNumber {
+/**
+ * A VersionNumber is the version of a state. Backwards compatible
+ * changes bump the @current version number, and backwards incompatible
+ * changes bump the @minimumCompatible version number to a version it is
+ * backwards compatible with.
+ */
+export interface VersionNumber<T> {
     minimumCompatible: number
     current: number
 }
 
-export interface VersionID {
+/**
+ * A TypeID is the unique identifier of a particular type
+ */
+export interface TypeID {
     low: number
     high: number
 }
 
-export type IdentifierTo<T> = {
+/**
+ * Maps a TypeID to the provided type, or void
+ */
+export type TypeIDTo<T> = {
     [low: number]: void | {
-        [high: number]: T
+        [high: number]: void | T
     }
 }
 
-export type StateVersion = IdentifierTo<void | VersionNumber>
+/**
+ * Maps a VersionID to the provided type, or void
+ */
+export type VersionIDTo<T> = {
+    [minimumCompatible: number]: void | {
+        [current: number]: void | T
+    }
+}
 
+/**
+ * This is a helper type to map a TypeID to a VersionNumber
+ * inside of a NameSpaceState.
+ */
+export type StateVersion<T> = TypeIDTo<VersionNumber<T>>
+
+/**
+ * This type holds the state for a NameSpace. Basically a namespace
+ * needs to be able to refer to any of the types within in, which
+ * can be a struct, union, or value. It's clear that each of these
+ * should be a map, because we not only want to be able to look up
+ * which types are within the namespace, but access them quickly.
+ * This also makes moving types from one namespace to another quick.
+ * 
+ * Rather than mapping to the state of the struct/union/value directly
+ * mapping to the version gives us a very convenient way to serialize
+ * the state because there are no circular references.
+ * 
+ * @kind: This differentiates this type of state from others
+ * @id: This is a TypeID uniquely identifying this NamespaceState
+ * @namespace: Refers to the parent namespace portion of the fully
+ * qualified name.
+ * @name: The string name of this namespace.
+ * @structs: A StateVersion representing the structs in this namespace
+ * @unions: A StateVersion representing the unions in this namespace
+ * @values: A StateVersion representing the values in this namespace
+ */
 export interface NamespaceState {
     kind: 'NamespaceState'
-    id: VersionID
+    id: TypeID
     namespace: string[]
     name: string
-    version: VersionNumber
-    structs: StateVersion
-    unions: StateVersion
-    values: StateVersion
+    version: VersionNumber<NamespaceState>
+    structs: StateVersion<StructState>
+    unions: StateVersion<UnionState>
+    values: StateVersion<ValueState>
 }
 
+/**
+ * Namespace history holds  
+ */
 export interface NamespaceHistory {
-    id: VersionID
-    history: {
-        [version: number]: void | NamespaceState
-    }
-    version: VersionNumber
+    id: TypeID
+    history: { [version: number]: void | NamespaceState }
+    minimumCompatibleVersion: VersionNumber<NamespaceToState>
+    currentVersion: VersionNumber<NamespaceToState>
 }
 
 // ==== Types =====
 
 export interface PrimitiveTypeState {
     type: 'Primitive'
-    id: VersionID
+    id: TypeID
 }
-export function PrimitiveTypeState(id: VersionID): PrimitiveTypeState {
+export function PrimitiveTypeState(id: TypeID): PrimitiveTypeState {
     return {
         type: 'Primitive',
         id,
@@ -187,11 +240,11 @@ export function PrimitiveTypeState(id: VersionID): PrimitiveTypeState {
 
 export interface GenericTypeState {
     type: 'Generic'
-    id: VersionID
+    id: TypeID
     generics: TypeState[]
 }
 
-export function GenericTypeState(id: VersionID, generics: TypeState[]): GenericTypeState {
+export function GenericTypeState(id: TypeID, generics: TypeState[]): GenericTypeState {
     return {
         type: 'Generic',
         id,
@@ -213,7 +266,7 @@ export type TypeStateReference = TypeState | GenericTypeStateReference
  * Maps a fully qualified name to its VersionID, if present
  */
 export interface TypeMap {
-    [name: string]: void | VersionID
+    [name: string]: void | TypeID
 }
 
 export function type_to_type_state(type: Type, typeMap: TypeMap): TypeState {
@@ -239,10 +292,10 @@ export function type_to_type_state(type: Type, typeMap: TypeMap): TypeState {
 }
 
 export type FilledTypeState = PrimitiveState | ListState | StructState | UnionState
-export type VersionMap = IdentifierTo<void | FilledTypeState | NamespaceState>
+export type VersionMap = TypeIDTo<void | FilledTypeState | NamespaceState>
 
 export function version_to_state(
-    versionID: VersionID,
+    versionID: TypeID,
     map: VersionMap) {
     const highMap = map[versionID.low]
     if (highMap) {
@@ -322,8 +375,11 @@ export function random_int32(): number {
     return Math.random()*0xFFFFFFF|0
 }
 
-// Creates a new unique versionID
-export function create_version_id(idMap: VersionMap): VersionID {
+/**
+ * Creates a new unique versionID
+ * @idMap: The current existing map of VersionID to FilledTypeState
+ */
+export function create_version_id(idMap: VersionMap): TypeID {
     while(true) {
         let versionId = {
             low: random_int32(),

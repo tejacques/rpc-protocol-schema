@@ -23,7 +23,7 @@ import {
     version_to_state,
     type_to_type_state,
     field_state_to_filled,
-    VersionID,
+    TypeID,
 } from './state'
 
 export function evaluate_commands(oldState: ProtocolState, commands: CreateCommand[]) {
@@ -134,10 +134,10 @@ export function ConstantInvalidNamespace(namespace: string[]): ConstantInvalidNa
 export interface ConstantInvalidType {
     kind: 'ConstantResult'
     status: ConstantResultState.InvalidType
-    id: VersionID
+    id: TypeID
 }
 
-export function ConstantInvalidType(id: VersionID): ConstantInvalidType {
+export function ConstantInvalidType(id: TypeID): ConstantInvalidType {
     return {
         kind: 'ConstantResult',
         status: ConstantResultState.InvalidType,
@@ -296,9 +296,14 @@ export function check_constant_value(state: ProtocolState, type: Type, value: Va
     return check_constant_state_value(state, type_state, value)
 }
 
+
+/**
+ * The idea of this function is that it takes the ProtocolState, along with
+ * a specific type, and a specific value, and it typechecks the value
+ */
 export function check_constant_state_value(
     state: ProtocolState,
-    type_state: TypeStateReference,
+    type_state: TypeState,
     value: Value): ConstantResult {
 
     switch(type_state.type) {
@@ -446,35 +451,24 @@ export function check_constant_state_value(
         
         //const type_state = version_to_state(namespace_state.state.versionMap
         return ConstantOk()
-    case 'GenericTypeStateReference':
-        switch(type_state.reference.kind) {
-        case 'TypeReference':
-            type_state.generics
-            break
-        case 'GenericTypeReference':
-            type_state.reference.index
-        }
-        return ConstantInvalidType()
     }
-
 }
 
 export function check_struct(
     state: ProtocolState,
     struct: Struct): StructResult {
     // Ensure that the referenced types are valid
-    const fieldResults = struct.fields
-        .map(field => {
-            return {
-                field: field.name,
-                status: field.value
+    const fieldResults = struct.fields.map(field => {
+        return {
+            field: field.name,
+            status: field.value
                 ? check_constant_value(
                     state,
                     field.type,
                     field.value)
                 : ConstantOk()
-            }
-        })
+        }
+    })
     // If the struct already exists, compare it
     return StructOk()
 }
