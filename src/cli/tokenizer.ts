@@ -29,6 +29,7 @@ export type token_type = 'NUMBER'
     | 'QUOTE'
     | 'COMMENT'
     | 'NEWLINE'
+    | 'START'
     | 'END'
     | operator_token
 
@@ -60,8 +61,8 @@ const optable: { [name: string]: void | operator_token } = {
     '=':  'EQUALS' as 'EQUALS',
 }
 
-function is_whitespace(character: string) {
-    return character === ' ' || character === '\t'
+function whitespace_width(character: string) {
+    return character === ' ' ? 1 : character === '\t' ? 4 : 0
 }
 
 function is_newline(character: string) {
@@ -98,136 +99,284 @@ function is_alphanumeric(character: string) {
     return alphanumeric_characters[character] || false
 }
 
+export interface lexer_state {
+    start_index: number
+    end_index: number
+    line: number
+    column: number
+    input: string
+}
 
 export interface lexer_token {
     type: token_type
     token: string
-    start_index: number
-    end_index: number
 }
-export function *tokenize(input: string) {
-    let start_index = 0
-    let end_index = 0
 
-    const len = input.length
-    let current_char = ''
+export interface lexer_result {
+    state: lexer_state
+    value: lexer_token
+}
 
-    // const process_comment = () => {
-    //     while(!is_newline(input[end_index]) && end_index < len) {
-    //         end_index++
-    //     }
-    // }
+export interface LexerIterator extends Iterable<lexer_result> {
+    next: () => LexerIterator
+    current: () => lexer_result
+    done: () => boolean
+}
 
-    const process_non_tokens = () => {
-        while(is_whitespace(input[end_index])) {
-            end_index++
-        }
-        start_index = end_index
-    }
-
-    const process_quote = (quote_literal: string) => {
-        end_index = input.indexOf(quote_literal, start_index+quote_literal.length)
-
-        if (end_index === -1) {
-            throw Error(`Error: Unterminated quote at ${start_index}`);
-        }
-
-        return yieldVal(next_token('QUOTE'))
-    }
-
-    const process_identifier = () => {
-        end_index++
-        while (end_index < len && is_alphanumeric(input[end_index])) {
-            end_index++
-        }
-
-        return yieldVal(next_token('IDENTIFIER'))
-    }
-
-    const process_number = () => {
-        while (is_numeric(input[end_index])) {
-            end_index++
-        }
-
-        return yieldVal(next_token('NUMBER'))
-    }
-
-    const process_newline = () => {
-        const saved_start = start_index
-        while(is_newline(input[end_index])) {
-            end_index++
-            process_non_tokens()
-        }
-        start_index = saved_start
-
-        return yieldVal(next_token('NEWLINE'))
-    }
-
-    const next_token = (type: token_type) => {
-        const token = input.substring(start_index, end_index)
-        
-        const next: lexer_token = {
-            type,
-            token,
-            start_index,
-            end_index,
-        }
-
-        start_index = end_index
-
-        return next
-    }
-
-    const yieldVal = function *(token: lexer_token) {
-        const reset: void | lexer_token = yield token
-        if (reset) {
-            start_index = reset.start_index
-            end_index = reset.start_index
-            current_char = input[end_index]
-            yield token
-        }
-    }
-
+function *IterateTokens(state: lexer_state) {
+    let res = next_result(state, 'START')
+    console.log(res.value, res.state.line, res.state.column)
     while(true) {
-        process_non_tokens()
-
-        const current_char = input[end_index]
-
-        const operator = optable[current_char]
-        if (operator) {
-            end_index++
-            yield *yieldVal(next_token(operator))
-            continue
+        res = next(res.state)
+        console.log(res.value, res.state.line, res.state.column)
+        if (res.value.type !== 'END') {
+            yield res
+        } else {
+            return res
         }
-
-        if (is_newline(current_char)) {
-            yield *process_newline()
-            continue
-        }
-
-        if (is_alpha(current_char)) {
-            yield *process_identifier()
-            continue
-        }
-
-        if (is_numeric(current_char)) {
-            yield *process_number()
-            continue
-        }
-
-        if (current_char === '"' || current_char === "'") {
-            yield *process_quote(current_char)
-            continue
-        }
-
-        if (start_index >= len) {
-            yield *yieldVal(next_token('END'))
-            if (start_index >= len) {
-                break
-            }
-            continue
-        }
-
-        throw new Error(`Error processing next token at position: ${start_index}, char: '${current_char}'`)
     }
+}
+
+export class Tokenizer implements Iterable<lexer_result> {
+    readonly state: lexer_state
+    constructor(input: string) {
+        this.state = {
+            start_index: 0,
+            end_index: 0,
+            line: 1,
+            column: 1,
+            input: input,
+        }
+    }
+
+    start(): InstantiatedTokenizer {
+        const result = next_result(this.state, 'START')
+        return new InstantiatedTokenizer(result)
+    }
+
+    [Symbol.iterator]() {
+        return IterateTokens(this.state)
+    }
+}
+
+export interface TokenSuccess {
+    kind: 'TokenSuccess'
+    token: lexer_token
+    lexer: InstantiatedTokenizer
+}
+export function TokenSuccess(lexer: InstantiatedTokenizer, token: lexer_token): TokenSuccess {
+    return {
+        kind: 'TokenSuccess',
+        token,
+        lexer,
+    }
+}
+
+export interface TokenError {
+    kind: 'TokenError'
+    error: string
+    lexer: InstantiatedTokenizer
+}
+export function TokenError(lexer: InstantiatedTokenizer, error: string): TokenError {
+    return {
+        kind: 'TokenError',
+        error,
+        lexer,
+    }
+}
+
+export type TokenResult = TokenSuccess | TokenError
+
+export class InstantiatedTokenizer implements LexerIterator {
+    readonly result: lexer_result
+    constructor(result: lexer_result) {
+        this.result = result
+    }
+
+    current(): lexer_result {
+        return this.result
+    }
+
+    next(): InstantiatedTokenizer {
+        const result = next(this.result.state)
+        return new InstantiatedTokenizer(result)
+    }
+
+    done(): boolean {
+        return this.result.value.type !== 'END'
+    }
+
+    [Symbol.iterator]() {
+        return IterateTokens(this.result.state)
+    }
+
+    matchType<TOut>(
+        type: token_type,
+        onMatch: (token: lexer_token) => TOut,
+        noMatch: (token: lexer_token) => TOut): TOut {
+        if (this.result.value.type === type) {
+            return onMatch(this.result.value)
+        }
+
+        return noMatch(this.result.value)
+    }
+
+    matchText<TOut>(
+        token: string,
+        onMatch: (token: lexer_token) => TOut,
+        noMatch: (token: lexer_token) => TOut): TOut {
+        if (this.result.value.token === token) {
+            return onMatch(this.result.value)
+        }
+
+        return noMatch(this.result.value)
+    }
+
+    consumeType(type: token_type): TokenResult {
+        return this.matchType<TokenResult>(type,
+            token =>
+                TokenSuccess(this.next(), token),
+            token =>
+                TokenError(this, `Expected ${type} but got ${token.type} with value: '${token.token}'`)
+        )
+    }
+
+    consumeText(text: string): TokenResult {
+        return this.matchText<TokenResult>(text,
+            token =>
+                TokenSuccess(this.next(), token),
+            token =>
+                TokenError(this, `Expected '${text}' but got '${token.token}'`)
+        )
+    }
+}
+
+export function tokenize(input: string): Tokenizer {
+    return new Tokenizer(input)
+}
+
+
+const update_state = (state: lexer_state, partial: Partial<lexer_state>): lexer_state => {
+    return {
+        ...state,
+        ...partial
+    }
+}
+
+const next_result = (state: lexer_state, type: token_type): lexer_result => {
+    const token = state.input.substring(state.start_index, state.end_index)
+    
+    const current_token = {
+        type,
+        token,
+    }
+
+    return {
+        state: state,
+        value: current_token
+    }
+}
+
+const process_non_tokens = (state: lexer_state) => {
+    let num_whitespace: number
+
+    let end_index = state.end_index
+    let column = state.column
+
+    while((num_whitespace = whitespace_width(state.input[end_index])) > 0) {
+        end_index++,
+        column += num_whitespace
+    }
+
+    return update_state(state, {
+        start_index: end_index,
+        end_index,
+        column,
+    })
+}
+
+const process_quote = (state: lexer_state, quote_literal: string) => {
+    let st = update_state(state, {
+        end_index: state.input.indexOf(
+            quote_literal, state.start_index+quote_literal.length)
+    })
+
+    if (st.end_index === -1) {
+        throw Error(`Error: Unterminated quote starting at line: ${st.line}`
+            +`, column: ${st.column}, index: ${st.start_index}`);
+    }
+
+    return next_result(st, 'QUOTE')
+}
+
+const process_identifier = (state: lexer_state) => {
+    let end_index = state.end_index+1
+    const len = state.input.length
+    while (end_index < len && is_alphanumeric(state.input[end_index])) {
+        end_index++
+    }
+
+    return next_result(update_state(state, { end_index }), 'IDENTIFIER')
+}
+
+const process_number = (state: lexer_state) => {
+    let end_index = state.end_index
+    while (is_numeric(state.input[end_index])) {
+        end_index++
+    }
+
+    return next_result(update_state(state, { end_index }), 'NUMBER')
+}
+
+const process_newline = (state: lexer_state) => {
+    let end_index = state.end_index
+    let line = state.line
+    let column = state.column
+    while(is_newline(state.input[end_index])) {
+        end_index++
+        line++
+        column = 0
+    }
+
+    return next_result(
+        update_state(state, { end_index, line, column }), 'NEWLINE')
+}
+
+function next(st: lexer_state): lexer_result {
+    const new_state = update_state(st, {
+        start_index: st.end_index,
+        column: st.column + (st.end_index - st.start_index)
+    })
+    if (new_state.start_index >= new_state.input.length) {
+        return next_result(new_state, 'END') 
+    }
+    let state = process_non_tokens(new_state)
+
+    const current_char = state.input[state.end_index]
+
+    const operator = optable[current_char]
+    if (operator) {
+        return next_result(
+            update_state(state, { end_index: state.end_index+1 }), operator)
+    }
+
+    if (is_newline(current_char)) {
+        return process_newline(state)
+    }
+
+    if (is_alpha(current_char)) {
+        return process_identifier(state)
+    }
+
+    if (is_numeric(current_char)) {
+        return process_number(state)
+    }
+
+    if (current_char === '"' || current_char === "'") {
+        return process_quote(state, current_char)
+    }
+
+    throw new Error(`Error processing next token at `
+        +`line: ${state.line}, column: ${state.column}, `
+        +`position: ${state.start_index}, char: '${current_char}'`)
 }

@@ -18,6 +18,7 @@ import {
  * state.
  */
 export interface ProtocolState {
+    version: VersionNumber<ProtocolState>
     versionMap: VersionMap
     namespaces: NamespaceToState
     typeMap: TypeMap
@@ -136,6 +137,7 @@ export interface TypeReference {
 export interface VersionNumber<T> {
     minimumCompatible: number
     current: number
+    type: undefined | T
 }
 
 /**

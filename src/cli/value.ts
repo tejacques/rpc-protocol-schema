@@ -3,7 +3,7 @@ import {
 } from './types'
 
 import {
-    lexer_token
+    LexerIterator,
 } from './tokenizer'
 
 import {
@@ -76,7 +76,7 @@ export function DateValue(value: string): DateValue {
 
 export type Value = PrimitiveValue | ObjectValue | ListValue | DateValue
 
-export function parse_object_property(lexer: IterableIterator<lexer_token>): ObjectProperty {
+export function parse_object_property(lexer: LexerIterator): ObjectProperty {
     const name_token = lexer.next().value
     const name = parse_name_token(name_token)
     parse_token(':', lexer)
@@ -84,7 +84,7 @@ export function parse_object_property(lexer: IterableIterator<lexer_token>): Obj
     return ObjectProperty(name, value)
 }
 
-export function parse_object_value(lexer: IterableIterator<lexer_token>): ObjectValue {
+export function parse_object_value(lexer: LexerIterator): ObjectValue {
     return ObjectValue(parse_inner_series(
         'object value',
         'L_BRACE',
@@ -94,7 +94,7 @@ export function parse_object_value(lexer: IterableIterator<lexer_token>): Object
         lexer))
 }
 
-export function parse_number(lexer: IterableIterator<lexer_token>) {
+export function parse_number(lexer: LexerIterator) {
     let next_token = lexer.next().value
     let value: string = ''
     let success: boolean
@@ -136,7 +136,7 @@ export function parse_number(lexer: IterableIterator<lexer_token>) {
     throw Error(`Error: Failed to parse number`)
 }
 
-export function parse_value(lexer: IterableIterator<lexer_token>): Value {
+export function parse_value(lexer: LexerIterator): Value {
     const next_token = lexer.next().value
 
     switch(next_token.type) {
@@ -146,12 +146,12 @@ export function parse_value(lexer: IterableIterator<lexer_token>): Value {
     case 'DOT':
     case 'NUMBER':
         // Reset
-        lexer.next(next_token)
+        lexer.reset(next_token)
         return parse_number(lexer)
     case 'L_BRACE':
         // type: <value>
         // Reset
-        lexer.next(next_token)
+        lexer.reset(next_token)
         return parse_object_value(lexer)
     case 'IDENTIFIER':
         if (next_token.token === 'true' || next_token.token === 'false') {
@@ -174,7 +174,7 @@ export function parse_value(lexer: IterableIterator<lexer_token>): Value {
     throw Error(`Error: Invalid value`)
 }
 
-export function parse_list(lexer: IterableIterator<lexer_token>): ListValue {
+export function parse_list(lexer: LexerIterator): ListValue {
     return ListValue(parse_inner_series(
         'list value',
         'L_BRACKET',

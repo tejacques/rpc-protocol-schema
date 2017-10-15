@@ -1,0 +1,32 @@
+{
+  "name": "rpc-protocol-schema",
+  "version": "1.0.0",
+  "description": "A protocol schema defition toolkit",
+  "main": "wallaby.js",
+  "scripts": {
+    "test": "mocha -r ts-node/register src/**/*.spec.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tejacques/rpc-protocol-schema.git"
+  },
+  "keywords": [
+    "rpc",
+    "protocol",
+    "schema"
+  ],
+  "author": "Tom Jacques",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/tejacques/rpc-protocol-schema/issues"
+  },
+  "homepage": "https://github.com/tejacques/rpc-protocol-schema",
+  "devDependencies": {
+    "@types/chai": "^4.0.4",
+    "@types/mocha": "^2.2.43",
+    "chai": "^4.1.2",
+    "mocha": "^3.5.3",
+    "ts-node": "^3.3.0",
+    "typescript": "^2.5.2"
+  }
+}

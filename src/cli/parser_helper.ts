@@ -1,20 +1,23 @@
 import {
     lexer_token,
+    LexerIterator,
     token_type,
 } from './tokenizer'
 
-export function parse_token(token_string: string, lexer: IterableIterator<lexer_token>) {
+export function parse_token(token_string: string, lexer: LexerIterator): LexerIterator {
     const next = lexer.next()
-    if (next.done) {
+    if (next.done()) {
         throw Error(`Error: unexpected end of stream`)
     }
 
-    if (next.value.token !== token_string) {
-        throw Error(`Error: Expected '${token_string}' but got '${next.value.token}'`)
+    if (next.current().value.token !== token_string) {
+        throw Error(`Error: Expected '${token_string}' but got '${next.current().value.token}'`)
     }
+
+    return next
 }
 
-export function try_parse_token(token_string: string, lexer: IterableIterator<lexer_token>): [boolean, lexer_token] {
+export function try_parse_token(token_string: string, lexer: LexerIterator): [boolean, lexer_token] {
     const next = lexer.next()
     if (next.done) {
         throw Error(`Error: unexpected end of stream`)
@@ -23,12 +26,12 @@ export function try_parse_token(token_string: string, lexer: IterableIterator<le
     if (next.value.token === token_string) {
         return [true, next.value]
     } else {
-        lexer.next(next.value)
+        lexer.reset(next.value)
         return [false, next.value]
     }
 }
 
-export function try_parse_type(type: token_type, lexer: IterableIterator<lexer_token>): [boolean, lexer_token] {
+export function try_parse_type(type: token_type, lexer: LexerIterator): [boolean, lexer_token] {
     const next = lexer.next()
     if (next.done) {
         throw Error(`Error: unexpected end of stream`)
@@ -37,12 +40,12 @@ export function try_parse_type(type: token_type, lexer: IterableIterator<lexer_t
     if (next.value.type === type) {
         return [true, next.value]
     } else {
-        lexer.next(next.value)
+        lexer.reset(next.value)
         return [false, next.value]
     }
 }
 
-export function try_parse_types(types: token_type[], lexer: IterableIterator<lexer_token>): [boolean, lexer_token] {
+export function try_parse_types(types: token_type[], lexer: LexerIterator): [boolean, lexer_token] {
     const next = lexer.next()
     if (next.done) {
         throw Error(`Error: unexpected end of stream`)
@@ -51,16 +54,55 @@ export function try_parse_types(types: token_type[], lexer: IterableIterator<lex
     if (types.indexOf(next.value.type) !== -1) {
         return [true, next.value]
     } else {
-        lexer.next(next.value)
+        lexer.reset(next.value)
         return [false, next.value]
     }
 }
 
-export function parse_name_token(token: lexer_token) {
-    if (/[a-zA-Z0-9_]+/.test(token.token)) {
-        return token.token
+
+export interface NameSuccess {
+    kind: 'NameSuccess'
+    name: string
+    lexer: LexerIterator
+}
+export function NameSuccess(lexer: LexerIterator, name: string): NameSuccess {
+    return {
+        kind: 'NameSuccess',
+        name,
+        lexer,
+    }
+}
+
+export interface NameError {
+    kind: 'NameError'
+    error: string
+    lexer: LexerIterator
+}
+export function NameError(lexer: LexerIterator, error: string): NameError {
+    return {
+        kind: 'NameError',
+        error,
+        lexer,
+    }
+}
+
+export type NameResult = NameSuccess | NameError
+
+export function parse_name_token(iter: LexerIterator): NameResult {
+    const next = iter.next()
+    const token = next.current().value
+    if (token.type !== 'IDENTIFIER') {
+        return NameError(
+            next,
+            `Expected IDENTIFIER token, but parsed ${token.type}`
+        )
+    }
+    if (/[a-zA-Z_][a-zA-Z0-9_]*/.test(token.token)) {
+        return NameSuccess(next, token.token)
     } else {
-        throw Error(`Name: '${token.token}' must be lowercase snake_case and alphanumeric, beginning with an alpha character`)
+        return NameError(
+            next,
+            `Name: '${token.token}' must be lowercase snake_case and alphanumeric, beginning with an alpha character`)
     }
 }
 
@@ -69,8 +111,8 @@ export function parse_inner_series<InnerType>(
     start_token: token_type,
     end_token: token_type,
     separator_tokens: token_type[],
-    parse_inner: (lexer: IterableIterator<lexer_token>) => InnerType,
-    lexer: IterableIterator<lexer_token>
+    parse_inner: (lexer: LexerIterator) => InnerType,
+    lexer: LexerIterator
 ): InnerType[] {
     let next_token = lexer.next().value
     if (next_token.type !== start_token) {
@@ -79,7 +121,7 @@ export function parse_inner_series<InnerType>(
     next_token = lexer.next().value
     if (next_token.type !== 'NEWLINE') {
         // Reset
-        lexer.next(next_token)
+        lexer.reset(next_token)
     }
     const inner: InnerType[] = []
     do {
@@ -92,7 +134,7 @@ export function parse_inner_series<InnerType>(
             if (next_token.type === end_token || next_token.type === 'END') {
                 break
             } else {
-                lexer.next(next_token)
+                lexer.reset(next_token)
             }
         } else if (next_token.type !== end_token && next_token.type !== 'END' ) {
             throw Error('Error: expected separator, or end token')

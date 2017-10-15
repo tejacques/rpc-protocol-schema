@@ -7,6 +7,9 @@ import {
 
 import {
     tokenize,
+    Tokenizer,
+    InstantiatedTokenizer,
+    LexerIterator,
     lexer_token,
     token_type,
 } from './tokenizer'
@@ -24,21 +27,63 @@ import {
     parse_value,
 } from './value'
 
-export function parse_namespace(lexer: IterableIterator<lexer_token>) {
+export interface NamespaceSuccess {
+    kind: 'NamespaceSuccess'
+    namespace: string[]
+    lexer: LexerIterator
+}
+
+export function NamespaceSuccess(lexer: LexerIterator, names: string[]): NamespaceSuccess {
+    return {
+        kind: 'NamespaceSuccess',
+        namespace: names,
+        lexer,
+    }
+}
+
+export interface NamespaceError {
+    kind: 'NamespaceError'
+    error: string
+    lexer: LexerIterator
+}
+
+export function NamespaceError(lexer: LexerIterator, error: string): NamespaceError {
+    return {
+        kind: 'NamespaceError',
+        error,
+        lexer,
+    }
+}
+
+export type NamespaceResult = NamespaceSuccess | NamespaceError
+
+/**
+ * This function takes a LexerIterator, and returns either a successfully
+ * parsed namespace and the continuation iterator, or a NamespaceError
+ * with the accompanying failure message and lexer state.
+ * 
+ * @param iterArg The LexerIterator
+ */
+export function parse_namespace(iterArg: LexerIterator): NamespaceResult {
     const names: string[] = []
+    let iter = iterArg
 
-    let next_token: lexer_token
-    do {
-        const next = lexer.next()
-        next_token = next.value
-        names.push(parse_name_token(next_token))
-        next_token = lexer.next().value
-    } while (is_dot_character(next_token))
+    let next_dot_token: lexer_token
+    while(true) {
+        const nameRes = parse_name_token(iter)
+        if (nameRes.kind === 'NameSuccess') {
+            names.push(nameRes.name)
+            iter = nameRes.lexer
+        } else {
+            return NamespaceError(nameRes.lexer, nameRes.error)
+        }
 
-    // Reset lexer to previous token
-    lexer.next(next_token)
-
-    return names
+        const next_dot = iter.next()
+        next_dot_token = next_dot.current().value
+        if (!is_dot_character(next_dot_token)) {
+            return NamespaceSuccess(iter, names)
+        }
+    }
 }
 
 export function parse_namespace_token(token: lexer_token) {
@@ -49,30 +94,41 @@ export function parse_namespace_token(token: lexer_token) {
     }
 }
 
-export function parse_method(lexer: IterableIterator<lexer_token>): Method {
-    const name = parse_name(lexer)
+export function parse_method(iterArg: LexerIterator): Method {
+    const nameRes = parse_name(iterArg)
+    if (nameRes.kind == 'NameError') {
+        throw Error(nameRes.error)
+    }
+    const name = nameRes.name
+    let iter = nameRes.lexer
 
     let generics: string[] = []
     let request: Field[] = []
     let response: Field[] = []
     
-    const token = lexer.next().value;
+    const iterRes = iter.next().current();
 
-    // Reset token
-    lexer.next(token)
-    switch(token.token) {
+    switch(iterRes.value.token) {
     case '<':
-        generics = parse_generics(lexer)
+        generics = parse_generics(iter)
         // Fall through
     case '(':
-        request = parse_fields('L_PAREN', 'R_PAREN', lexer)
+        const requestFieldsRes = parse_fields('L_PAREN', 'R_PAREN', iter)
+        if (requestFieldsRes.kind == 'FieldError') {
+            throw Error(requestFieldsRes.error)
+        }
+        request = requestFieldsRes.fields
         try {
-            parse_token('=', lexer)
-            parse_token('>', lexer)
+            iter = parse_token('=', iter)
+            iter = parse_token('>', iter)
         } catch(e) {
             throw Error(`Error: expected '=>' to follow method declaration`)
         }
-        response = parse_fields('L_PAREN', 'R_PAREN', lexer)
+        const responseFieldsRes = parse_fields('L_PAREN', 'R_PAREN', iter)
+        if (responseFieldsRes.kind == 'FieldError') {
+            throw Error(responseFieldsRes.error)
+        }
+        response = responseFieldsRes.fields
         break
     default:
         throw Error(`Error: expected generic arguments beginning with '<', or fields beginning with '{' but got ${token.token}`)
@@ -84,7 +140,7 @@ export function parse_method(lexer: IterableIterator<lexer_token>): Method {
 export function parse_methods(
     start_token: token_type,
     end_token: token_type,
-    lexer: IterableIterator<lexer_token>): Method[] {
+    lexer: LexerIterator): Method[] {
     return parse_inner_series(
         'methods',
         start_token,
@@ -94,7 +150,7 @@ export function parse_methods(
         lexer)
 }
 
-export function parse_interface(lexer: IterableIterator<lexer_token>): Interface {
+export function parse_interface(lexer: LexerIterator): Interface {
     const namespace = parse_namespace(lexer)
     const name = namespace.pop()
 
@@ -107,7 +163,7 @@ export function parse_interface(lexer: IterableIterator<lexer_token>): Interface
     return Interface(name, namespace, methods)
 }
 
-export function parse_constant(lexer: IterableIterator<lexer_token>) {
+export function parse_constant(lexer: LexerIterator) {
     const namespace = parse_namespace(lexer)
     const name = namespace.pop()
 
@@ -123,14 +179,14 @@ export function parse_constant(lexer: IterableIterator<lexer_token>) {
     return Constant(name, namespace, type, value)
 }
 
-export function parse_create(lexer: IterableIterator<lexer_token>): CreateCommand {
+export function parse_create(lexer: LexerIterator): CreateCommand {
     return {
         kind: 'CREATE',
         type: parse_create_type(lexer)
     }
 }
 
-export function parse_create_type(lexer: IterableIterator<lexer_token>): CreateCommandType {
+export function parse_create_type(lexer: LexerIterator): CreateCommandType {
     const next = lexer.next()
     if (next.done) {
         throw Error('Error unexpected end of command while trying to parse CREATE statement')
@@ -139,9 +195,9 @@ export function parse_create_type(lexer: IterableIterator<lexer_token>): CreateC
 
     switch(nextToken.token.toUpperCase()) {
     case 'STRUCT':
-        return parse_kind('STRUCT', lexer)
+        return parse_data_type('STRUCT', lexer)
     case 'UNION':
-        return parse_kind('UNION', lexer)
+        return parse_data_type('UNION', lexer)
     case 'INTERFACE':
         return parse_interface(lexer)
     case 'NAMESPACE':
@@ -233,7 +289,7 @@ export function Union(name: string, namespace: string[], generics: string[], fie
     }
 }
 
-export function Kind(
+export function DataType(
     kind: 'STRUCT' | 'UNION',
     name: string,
     namespace: string[],
@@ -288,16 +344,43 @@ export function Field(name: string, type: Type, value?: Value): Field {
     }
 }
 
-export function parse_name(lexer: IterableIterator<lexer_token>) {
-    const next = lexer.next()
-    if (next.done) {
-        throw Error('Error unexpected end of command while trying to parse CREATE statement')
-    }
-    return parse_name_token(next.value)
+export function parse_name(iter: LexerIterator) {
+    return parse_name_token(iter)
 }
 
-export function parse_type(lexer: IterableIterator<lexer_token>): Type {
-    const namespace = parse_namespace(lexer)
+export interface ParseTypeSuccess {
+    kind: 'ParseTypeSuccess'
+    type: Type
+    lexer: LexerIterator
+}
+export function ParseTypeSuccess(lexer: LexerIterator, type: Type): ParseTypeSuccess {
+    return {
+        kind: 'ParseTypeSuccess',
+        type,
+        lexer,
+    }
+}
+
+export interface ParseTypeError {
+    kind: 'ParseTypeError'
+    error: string
+    lexer: LexerIterator
+}
+export function ParseTypeError(lexer: LexerIterator, error: string): ParseTypeError {
+    return {
+        kind: 'ParseTypeError',
+        error,
+        lexer,
+    }
+}
+
+export type ParseTypeResult = ParseTypeSuccess | ParseTypeError
+
+export function parse_type(lexer: LexerIterator): ParseTypeResult {
+    const namespace_res = parse_namespace(lexer)
+    if (namespace_res.kind === 'NamespaceError') {
+        return ParseTypeError(namespace_res.lexer, namespace_res.error)
+    }
     const name = namespace.pop()
 
     if (!name) {
@@ -305,20 +388,20 @@ export function parse_type(lexer: IterableIterator<lexer_token>): Type {
     }
 
     if(is_primitive_type(name)) {
-        return PrimitiveType(name)
+        return ParseTypeSuccess(namespace_res.lexer, PrimitiveType(name))
     } else {
         const [matches, parsed_token] = try_parse_token('<', lexer)
         let types: Type[] = []
         if (matches) {
             // Reset
-            lexer.next(parsed_token)
+            lexer.reset(parsed_token)
             types = parse_generic_types(lexer)
         }
         return GenericType(name, namespace, types)
     }
 }
 
-export function parse_generic_type(lexer: IterableIterator<lexer_token>): Type {
+export function parse_generic_type(lexer: LexerIterator): Type {
     let [res, token] = try_parse_token('<', lexer)
     if (!res) {
         throw Error(`Error: Expected '<' token but got ${token.token}`)
@@ -332,7 +415,7 @@ export function parse_generic_type(lexer: IterableIterator<lexer_token>): Type {
     throw Error(`Error: Expected '>' closing token but got ${last_token.token}`)
 }
 
-export function parse_generic_types(lexer: IterableIterator<lexer_token>): Type[] {
+export function parse_generic_types(lexer: LexerIterator): Type[] {
     let [res, token] = try_parse_token('<', lexer)
     if (!res) {
         throw Error(`Error: Expected '<' token but got ${token.token}`)
@@ -351,7 +434,7 @@ export function parse_generic_types(lexer: IterableIterator<lexer_token>): Type[
     throw Error(`Error: Expected '>' closing token but got ${next_token.token}`)
 }
 
-export function parse_generics(lexer: IterableIterator<lexer_token>): string[] {
+export function parse_generics(lexer: LexerIterator): string[] {
     const generics: string[] = []
     const open_square_bracket = lexer.next().value
     if (open_square_bracket.token !== '<') {
@@ -379,18 +462,49 @@ function is_dot_character(dot_token: lexer_token) {
     return dot_token.token === '.'
 }
 
-export function parse_field(lexer: IterableIterator<lexer_token>) {
-    const name_token = lexer.next().value
-    const name = parse_name_token(name_token)
-    parse_token(':', lexer)
-    const type = parse_type(lexer)
-    return Field(name, type)
+export interface FieldSuccess {
+    kind: 'FieldSuccess'
+    field: Field
+    lexer: LexerIterator
+}
+export function FieldSuccess(lexer: LexerIterator, field: Field): FieldSuccess {
+    return {
+        kind: 'FieldSuccess',
+        field,
+        lexer,
+    }
+}
+
+export interface FieldError {
+    kind: 'FieldError'
+    error: string
+    lexer: LexerIterator
+}
+export function FieldError(lexer: LexerIterator, error: string): FieldError {
+    return {
+        kind: 'FieldError',
+        error,
+        lexer,
+    }
+}
+
+export type FieldResult = FieldSuccess | FieldError
+
+export function parse_field(lexer: LexerIterator): FieldResult {
+    const name_res = parse_name_token(lexer)
+    if (name_res.kind === 'NameError') {
+        return FieldError(name_res.lexer, name_res.error)
+    }
+    let iter = name_res.lexer
+    iter = parse_token(':', iter)
+    const typeRes = parse_type(iter)
+    return FieldSuccess(iter, Field(name_res.name, type))
 }
 
 export function parse_fields(
     start_token: token_type,
     end_token: token_type,
-    lexer: IterableIterator<lexer_token>): Field[] {
+    lexer: LexerIterator): FieldResult[] {
         return parse_inner_series(
             'fields',
             start_token,
@@ -400,9 +514,42 @@ export function parse_fields(
             lexer)
 }
 
-export function parse_kind(kind: 'STRUCT' | 'UNION', lexer: IterableIterator<lexer_token>) {
-    const namespace = parse_namespace(lexer)
+export interface DataTypeSuccess {
+    kind: 'DataTypeSuccess'
+    dataType: Struct | Union
+    lexer: LexerIterator
+}
+export function DataTypeSuccess(lexer: LexerIterator, dataType: Struct | Union): DataTypeSuccess {
+    return {
+        kind: 'DataTypeSuccess',
+        dataType,
+        lexer,
+    }
+}
+
+export interface DataTypeError {
+    kind: 'DataTypeError'
+    error: string
+    lexer: LexerIterator
+}
+export function DataTypeError(lexer: LexerIterator, error: string): DataTypeError {
+    return {
+        kind: 'DataTypeError',
+        error,
+        lexer,
+    }
+}
+
+export type DataTypeResult = DataTypeSuccess | DataTypeError
+
+export function parse_data_type(kind: 'STRUCT' | 'UNION', lexer: LexerIterator): DataTypeResult {
+    const namespace_res = parse_namespace(lexer)
+    if (namespace_res.kind === 'NamespaceError') {
+        throw Error(namespace_res.error)
+    }
+    const namespace = namespace_res.namespace
     const name = namespace.pop()
+    let iter = namespace_res.lexer
 
     if (!name) {
         throw Error(`Error: Interface has no name`)
@@ -411,24 +558,30 @@ export function parse_kind(kind: 'STRUCT' | 'UNION', lexer: IterableIterator<lex
     let generics: string[] = []
     let fields: Field[] = []
     
-    const token = lexer.next().value;
-    // Reset
-    lexer.next(token)
+    const token = iter.next().current().value;
+
     switch(token.token) {
     case '<':
-        generics = parse_generics(lexer)
+        generics = parse_generics(iter)
         // Fall through
     case '{':
-        fields = parse_fields('L_BRACE', 'R_BRACE', lexer)
+        const fields_res = parse_fields('L_BRACE', 'R_BRACE', iter)
+        const field_errors = fields_res.filter(fr => fr.kind === 'FieldError') as FieldError[]
+        if (field_errors.length) {
+            // TODO: Make this work properly
+            throw Error("Some shit happened")
+        }
+        fields = (fields_res.filter(fr => fr.kind === 'FieldSuccess') as FieldSuccess[])
+            .map(f => f.field)
         break
     default:
         throw Error(`Error: expected generic arguments beginning with '<', or fields beginning with '{' but got ${token.token}`)
     }
 
-    return Kind(kind, name, namespace, generics, fields)
+    return DataTypeSuccess(iter, DataType(kind, name, namespace, generics, fields))
 }
 
-export function parse_command(lexer: IterableIterator<lexer_token>) {
+export function parse_command(lexer: InstantiatedTokenizer) {
     const next = lexer.next()
     if (next.done) {
         throw Error('Error unexpected end of command while trying to parse a command')
@@ -451,21 +604,28 @@ export function parse_command(lexer: IterableIterator<lexer_token>) {
 
 }
 
-export function parse_commands(lexer: IterableIterator<lexer_token>) {
-    let next: IteratorResult<lexer_token>
+export function parse_commands(lexer: Tokenizer) {
+    let iter: InstantiatedTokenizer = lexer.start()
+    let lastIter = iter
     const commands: CreateCommand[] = []
-    while((next = lexer.next()) && !next.done) {
-        const nextToken = next.value
+    while((iter = iter.next()) && !iter.done()) {
+        const nextToken = iter.current().value
         switch (nextToken.type) {
             case 'NEWLINE':
             case 'END':
                 continue
             case 'IDENTIFIER':
-                // Reset Lexer
-                lexer.next(nextToken)
-                commands.push(parse_command(lexer))
+                const parse_res = parse_command(lastIter)
+                if (parse_res.kind == 'ParseError') {
+                    return ParseCommandsError(parse_res.lexer, commands, parse_res.error)
+                } else {
+                    commands.push(parse_res.command)
+                    iter = parse_res.lexer
+                }
                 break
         }
+
+        lastIter = iter
     }
 
     return commands

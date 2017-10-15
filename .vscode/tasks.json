@@ -6,6 +6,7 @@
     "isShellCommand": true,
     "args": ["-w", "-p", "."],
     //"showOutput": "silent",
-    "isWatching": true,
+    //"isWatching": true,
+    "isBackground": true,
     "problemMatcher": "$tsc-watch"
 }

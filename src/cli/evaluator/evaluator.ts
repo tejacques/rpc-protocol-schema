@@ -2,6 +2,7 @@ import {
     CreateCommand,
     Constant,
     Struct,
+    Field,
     Union,
     Interface,
 } from '../parser'
@@ -17,7 +18,7 @@ import {
 import {
     ProtocolState,
     TypeState,
-    TypeStateReference,
+    //TypeStateReference,
     FilledTypeState,
     //ValueState,
     version_to_state,
@@ -216,6 +217,9 @@ export interface ConstantResult {
 
 export const enum StructResultState {
     Ok,
+    AlreadyExists,
+    InvalidNamespace,
+    Error,
 }
 export interface StructResult {
     kind: 'StructResult'
@@ -231,6 +235,23 @@ export function StructOk(): StructOk {
     return {
         kind: 'StructResult',
         status: StructResultState.Ok,
+    }
+}
+
+export interface StructError {
+    kind: 'StructResult'
+    status: StructResultState.Error
+    errors: {
+        field: Field
+        status: ConstantResult
+    }[]
+}
+
+export function StructError(errors: { field: Field; status: ConstantResult}[]): StructError {
+    return {
+        kind: 'StructResult',
+        status: StructResultState.Error,
+        errors: errors,
     }
 }
 
@@ -460,7 +481,7 @@ export function check_struct(
     // Ensure that the referenced types are valid
     const fieldResults = struct.fields.map(field => {
         return {
-            field: field.name,
+            field: field,
             status: field.value
                 ? check_constant_value(
                     state,
@@ -469,6 +490,33 @@ export function check_struct(
                 : ConstantOk()
         }
     })
+
+    const failedFields = fieldResults.filter(fieldResult =>
+        fieldResult.status.status != ConstantResultState.Ok)
+    
+    if(failedFields.length) {
+        return StructError(failedFields)
+    }
+
     // If the struct already exists, compare it
+    // TODO...
+
+    // Everything is ok!
     return StructOk()
+}
+
+export function check_union(
+    state: ProtocolState,
+    union: Union): UnionResult {
+    throw Error(`Not implemented: state version: `
+        + `${state.version.minimumCompatible}.${state.version.current} `
+        + `union: ${union.namespace.join('.')}.${union.name}`)
+}
+
+export function check_interface(
+    state: ProtocolState,
+    iface: Interface): UnionResult {
+    throw Error(`Not implemented: state version: `
+        + `${state.version.minimumCompatible}.${state.version.current} `
+        + `union: ${iface.namespace.join('.')}.${iface.name}`)
 }
